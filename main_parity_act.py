@@ -46,10 +46,10 @@ class ACTRNN(chainer.Chain):
 
             nt = xp.ones((batch_size, 1))
             p_t_1 = F.where(h_t_1.data > 1.0 - self.epsilon,
-                            h_t_1 + (1.0 - h_t_1.data),  # i.e. R(t) = 1.0
+                            h_t_1 + (1.0 - h_t_1),  # i.e. R(t) = 1.0
                             h_t_1)
-            c_t = p_t_1.data.copy()  # cumlative sum of p_t_n
-            not_halted = c_t < 1.0
+            c_t = p_t_1  # cumlative sum of p_t_n
+            not_halted = c_t.data < 1.0
 
             s_t_ns = [s_t_1]
             p_t_ns = [p_t_1]
@@ -63,10 +63,10 @@ class ACTRNN(chainer.Chain):
                 s_t_n = F.tanh(x_t_n + self.l_ss(s_t_n))
                 h_t_n = F.sigmoid(self.l_sh(s_t_n))
                 if n <= self.max_ponder_steps:
-                    halt = c_t + h_t_n.data > 1 - self.epsilon
+                    halt = c_t.data + h_t_n.data > 1 - self.epsilon
                 else:
                     halt = xp.ones(h_t_n.data.shape, np.bool)
-                rt = h_t_n - ((h_t_n.data + c_t) - 1.0)
+                rt = h_t_n - ((h_t_n + c_t) - 1.0)
                 p_t_n = F.where(not_halted,
                                 F.where(halt,
                                         rt,
@@ -77,8 +77,8 @@ class ACTRNN(chainer.Chain):
                 s_t_ns.append(s_t_n)
                 p_t_ns.append(p_t_n)
                 y_t_ns.append(y_t_n)
-                c_t += p_t_n.data
-                not_halted = c_t < 1.0
+                c_t = c_t + p_t_n
+                not_halted = c_t.data < 1.0
                 n += 1
 
             print(n)
