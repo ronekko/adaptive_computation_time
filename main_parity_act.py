@@ -21,7 +21,7 @@ class ACTRNN(chainer.Chain):
         super(ACTRNN, self).__init__(
             l_xs=L.Linear(in_size + 1, s_size),
             l_ss=L.Linear(s_size, s_size),
-            l_sh=L.Linear(s_size, 1, bias=5),
+            l_sh=L.Linear(s_size, 1),
             l_sy=L.Linear(s_size, 1))
         self.in_size = in_size
         self.s_size = s_size
@@ -81,7 +81,7 @@ class ACTRNN(chainer.Chain):
                 not_halted = c_t.data < 1.0
                 n += 1
 
-            print(n)
+            print(n, end=', ')
             p_t_ns = F.concat(p_t_ns)
             s_t_ns = F.dstack(s_t_ns)
             y_t_ns = F.dstack(y_t_ns)
@@ -125,7 +125,7 @@ def ponder_loss(p_t_ns):
 
 
 if __name__ == '__main__':
-    max_bit_len = 10
+    max_bit_len = 64
     state_size = 128
     batch_size = 128
     learning_rate = 1e-4
@@ -151,8 +151,8 @@ if __name__ == '__main__':
         accuracy = F.binary_accuracy(y, t)
 
         print('acc:', accuracy.data)
-        print()
 
-        if i % 10 == 0:
+        if i % 50 == 0:
             plt.plot(loss_log)
+            plt.grid()
             plt.show()
