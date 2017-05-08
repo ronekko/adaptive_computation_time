@@ -66,7 +66,7 @@ class ACTRNN(chainer.Chain):
                     halt = c_t.data + h_t_n.data > 1 - self.epsilon
                 else:
                     halt = xp.ones(h_t_n.data.shape, np.bool)
-                rt = h_t_n - ((h_t_n + c_t) - 1.0)
+                rt = 1.0 -  c_t
                 p_t_n = F.where(not_halted,
                                 F.where(halt,
                                         rt,
