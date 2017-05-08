@@ -78,7 +78,7 @@ class ACTRNN(chainer.Chain):
                 p_t_ns.append(p_t_n)
                 y_t_ns.append(y_t_n)
                 c_t = c_t + p_t_n
-                not_halted = c_t.data < 1.0
+                not_halted = c_t.data < 1.0 - self.epsilon
                 n += 1
 
             print(n, end=', ')
