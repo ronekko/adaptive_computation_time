@@ -62,7 +62,7 @@ class ACTRNN(chainer.Chain):
                 nt += not_halted.astype(xp.int)
                 s_t_n = F.tanh(x_t_n + self.l_ss(s_t_n))
                 h_t_n = F.sigmoid(self.l_sh(s_t_n))
-                if n <= self.max_ponder_steps:
+                if n < self.max_ponder_steps - 1:
                     halt = c_t.data + h_t_n.data > 1 - self.epsilon
                 else:
                     halt = xp.ones(h_t_n.data.shape, np.bool)
