@@ -114,6 +114,7 @@ class PonderLoss(chainer.Function):
 
     def backward(self, inputs, gy):
         p_t_ns = inputs[0]
+        batch_size, max_time_steps = p_t_ns.shape
         xp = chainer.cuda.get_array_module(p_t_ns)
         gp_t_ns = xp.zeros_like(p_t_ns)
         gp_t_ns[xp.arange(batch_size), self._nt - 1] = gy
