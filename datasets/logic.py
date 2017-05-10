@@ -11,17 +11,17 @@ import matplotlib.pyplot as plt
 
 class LogicDataset(object):
     def __init__(self, batch_size=16, seq_len=3, max_ops=3, min_ops=1,
-                 n_gates=10, dim_vector=100):
+                 n_gate_types=10, n_slots_of_ops=10):
         self.batch_size = batch_size
         self.seq_len = seq_len
         self.max_ops = max_ops
         self.min_ops = min_ops
-        self.n_gates = n_gates
-        self.dim_vector = dim_vector
+        self.n_gate_types = n_gate_types
+        self.dim_vector = n_slots_of_ops * n_gate_types + 2
         self.table = self._create_table()
 
     def _create_table(self):
-        table = np.zeros((self.n_gates, 2, 2), np.int32)
+        table = np.zeros((self.n_gate_types, 2, 2), np.int32)
         table[0] = np.array([[1, 0], [0, 0]])
         table[1] = np.array([[0, 1], [0, 0]])
         table[2] = np.array([[0, 0], [1, 0]])
@@ -38,10 +38,14 @@ class LogicDataset(object):
         return self.next()
 
     def next(self):
+        batch_size = self.batch_size
         # generate random number of operations
-        x = np.zeros((batch_size, seq_len, dim_vector))
-        n_ops = np.random.randint(min_ops, max_ops, (batch_size, seq_len))
-        flat_ops = np.random.randint(0, n_gates, n_ops.sum()).tolist()
+        x = np.zeros((batch_size, self.seq_len, self.dim_vector - 2),
+                     np.float32)
+        n_ops = np.random.randint(
+            self.min_ops, self.max_ops, (batch_size, self.seq_len))
+        flat_ops = np.random.randint(
+            0, self.n_gate_types, n_ops.sum()).tolist()
         ops = []
         i = 0
         for x_i, n_ops_i in zip(x, n_ops):
@@ -49,7 +53,7 @@ class LogicDataset(object):
             for x_it, n_ops_it in zip(x_i, n_ops_i):
                 ops_it = flat_ops[i:i+n_ops_it]
                 ops_i.append(ops_it)
-                for x_ito in x_it.reshape((n_gates, -1))[:n_ops_it]:
+                for x_ito in x_it.reshape((self.n_gate_types, -1))[:n_ops_it]:
                     x_ito[flat_ops[i]] = 1
                     i += 1
             ops.append(ops_i)
@@ -70,9 +74,9 @@ class LogicDataset(object):
                     b1 = b2
                 ts.append(b2)
                 b0 = b2
-        t = np.reshape(ts, (batch_size, seq_len, 1))
-        b0 = np.reshape(b0s, (batch_size, seq_len, 1))
-        b1 = np.reshape(b1s, (batch_size, seq_len, 1))
+        t = np.reshape(ts, (batch_size, self.seq_len, 1))
+        b0 = np.reshape(b0s, (batch_size, self.seq_len, 1)).astype(np.float32)
+        b1 = np.reshape(b1s, (batch_size, self.seq_len, 1)).astype(np.float32)
         x = np.dstack((b0, b1, x))
         return x, t
 
@@ -87,7 +91,6 @@ class LogicDataset(object):
 if __name__ == '__main__':
     batch_size = 16
     n_gates = 10
-    dim_vector = 100
     seq_len = 3
 
     # min and max number of operations (i.e. `B` in the paper)
