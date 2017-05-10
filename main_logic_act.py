@@ -21,14 +21,12 @@ if __name__ == '__main__':
     seq_len = 3
     max_ops = 3
     min_ops = 1
-    n_gates = 10
-    dim_vector = 100
     state_size = 128
     batch_size = 16
     learning_rate = 1e-4
-    time_penalty = 0.01  # hyperparameter "tau"
+    time_penalty = 0.001  # hyperparameter "tau"
 
-    dataset = LogicDataset(batch_size, seq_len)
+    dataset = LogicDataset(batch_size, seq_len, max_ops, min_ops)
     dim_vector = dataset.dim_vector
 
     model = ACTRNN(dim_vector, state_size, 1)
