@@ -36,7 +36,7 @@ class RNN(chainer.Chain):
             x_t = x[:, t]
             s = F.tanh(self.l_xs(x_t) + self.l_ss(s))
 
-        y = self.l_sy(s)
+        y = F.expand_dims(self.l_sy(s), 1)
         return y
 
 
