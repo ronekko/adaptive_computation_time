@@ -6,11 +6,16 @@ Created on Fri May  5 13:23:42 2017
 """
 
 import numpy as np
+import chainer
 
 
-def generate_parity_data(batch_size=128, max_bits=64, min_bits=1):
+def generate_parity_data(
+        batch_size=128, max_bits=64, min_bits=1, use_gpu=False):
     x = generate_sequences(batch_size, max_bits, min_bits)
     y = 1 - (np.count_nonzero(x, 2).astype(np.int32) % 2)
+    if use_gpu:
+        x = chainer.cuda.to_gpu(x)
+        y = chainer.cuda.to_gpu(y)
     return x, y
 
 
