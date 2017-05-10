@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import chainer
 import chainer.functions as F
 
-from models.act_rnn import ACTRNN
+from models import ACTNet
 from datasets.parity import generate_parity_data
 
 
@@ -24,7 +24,7 @@ if __name__ == '__main__':
     learning_rate = 1e-4
     time_penalty = 0.0001  # hyperparameter "tau"
 
-    model = ACTRNN(max_bit_len, state_size, 1)
+    model = ACTNet(max_bit_len, state_size, 1)
     if use_gpu:
         model.to_gpu()
     optimizer = chainer.optimizers.Adam(learning_rate)
