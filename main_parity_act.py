@@ -32,100 +32,79 @@ class ACTRNN(chainer.Chain):
         xp = chainer.cuda.get_array_module(x)
         batch_size, seq_len, dim_features = x.shape
 
-        ponder_losses = []
         y = []
-        s_tm1 = xp.zeros((batch_size, self.s_size), dtype=x.dtype)  # s_{t-1}
+        ponder_costs = []
+        s_t_n = xp.zeros((batch_size, self.s_size), dtype=x.dtype)
 
         for t in range(seq_len):
             x_t = x[:, t]
-            n = 1
-            x_t_1 = xp.hstack((x_t, xp.ones((batch_size, 1), x.dtype)))
-            s_t_1 = F.tanh(self.l_xs(x_t_1) + self.l_ss(s_tm1))
-            h_t_1 = F.sigmoid(self.l_sh(s_t_1))
-            y_t_1 = self.l_sy(s_t_1)
+            s_t_ns = []
+            y_t_ns = []
+            p_t_ns = []
+            r_t_n = chainer.Variable(xp.ones((batch_size, 1), np.float32))
+            r_t = [r_t_n]
+            n_t = xp.full((batch_size, 1), -1, np.int32)
+            already_halted = xp.full((batch_size, 1), False, np.bool)
 
-            nt = xp.ones((batch_size, 1))
-            p_t_1 = F.where(h_t_1.data > 1.0 - self.epsilon,
-                            h_t_1 + (1.0 - h_t_1),  # i.e. R(t) = 1.0
-                            h_t_1)
-            c_t = p_t_1  # cumlative sum of p_t_n
-            not_halted = c_t.data < 1.0
+            n = 0
+            x_t_n = xp.hstack((x_t, xp.ones((batch_size, 1), x.dtype)))
+            x_t_n = self.l_xs(x_t_n)
 
-            s_t_ns = [s_t_1]
-            p_t_ns = [p_t_1]
-            y_t_ns = [y_t_1]
+            for n in range(self.max_ponder_steps):
+                if xp.all(already_halted):
+                    break
 
-            x_t_n = xp.hstack((x_t, xp.zeros((batch_size, 1), x.dtype)))
-            x_t_n = self.l_xs(x_t_n)  # precompute
-            s_t_n = s_t_1
-            while xp.any(not_halted) and n < self.max_ponder_steps:
-                nt += not_halted.astype(xp.int)
                 s_t_n = F.tanh(x_t_n + self.l_ss(s_t_n))
-                h_t_n = F.sigmoid(self.l_sh(s_t_n))
-                if n < self.max_ponder_steps - 1:
-                    halt = c_t.data + h_t_n.data > 1 - self.epsilon
-                else:
-                    halt = xp.ones(h_t_n.data.shape, np.bool)
-                rt = 1.0 - c_t
-                p_t_n = F.where(not_halted,
-                                F.where(halt,
-                                        rt,
-                                        h_t_n),
-                                xp.zeros((batch_size, 1), xp.float32))
                 y_t_n = self.l_sy(s_t_n)
+                h_t_n = F.sigmoid(self.l_sh(s_t_n))
+
+                if n < self.max_ponder_steps - 1:  # normal case
+                    halt = r_t_n.data - h_t_n.data < self.epsilon
+                else:  # truncation by max ponder steps
+                    halt = np.full((batch_size, 1), True)
+                p_t_n = F.where(already_halted,
+                                xp.zeros((batch_size, 1), xp.float32),
+                                F.where(halt,
+                                        r_t_n,
+                                        h_t_n))
 
                 s_t_ns.append(s_t_n)
-                p_t_ns.append(p_t_n)
                 y_t_ns.append(y_t_n)
-                c_t = c_t + p_t_n
-                not_halted = c_t.data < 1.0 - self.epsilon
-                n += 1
+                p_t_ns.append(p_t_n)
+                r_t_n -= p_t_n
+                r_t.append(r_t_n)
 
-            print(n, end=', ')
-            p_t_ns = F.concat(p_t_ns)
-            s_t_ns = F.dstack(s_t_ns)
-            y_t_ns = F.dstack(y_t_ns)
-            s_tm1 = F.batch_matmul(s_t_ns, p_t_ns).reshape(
-                batch_size, self.s_size)
-            y_t = F.batch_matmul(y_t_ns, p_t_ns).reshape(
-                batch_size, 1)
-            y.append(y_t)
+                now_halted = xp.logical_and(r_t_n.data < self.epsilon,
+                                            xp.logical_not(already_halted))
+                n_t[now_halted] = n
+                already_halted = xp.logical_or(already_halted, now_halted)
 
-            ponder_losses.append(ponder_loss(p_t_ns))
+                # compute x_t_n for n > 1 once
+                if n == 0:
+                    x_t_n = xp.hstack(
+                        (x_t, xp.zeros((batch_size, 1), x.dtype)))
+                    x_t_n = self.l_xs(x_t_n)
+            print(n + 1, end=', ')
+
+            s_t_ns = F.stack(s_t_ns, 1)
+            y_t_ns = F.stack(y_t_ns, 1)
+            p_t_ns = F.stack(p_t_ns, 1)
+            s_t = F.batch_matmul(p_t_ns, s_t_ns, transa=True)
+            y_t = F.batch_matmul(p_t_ns, y_t_ns, transa=True)
+
+            s_t_n = s_t.reshape(batch_size, -1)
+            y.append(y_t.reshape(batch_size, -1))
+            remainders_on_halt = F.concat(r_t)[range(128), n_t.ravel()]
+            ponder_cost = n_t.ravel().astype(xp.float32) + remainders_on_halt
+            ponder_costs.append(ponder_cost)
 
         y = F.concat(y)
-        loss = sum(ponder_losses)
-        return y, loss
-
-
-class PonderLoss(chainer.Function):
-    def forward(self, inputs):
-        p_t_ns = inputs[0]
-        xp = chainer.cuda.get_array_module(p_t_ns)
-        batch_size, max_time_steps = p_t_ns.shape
-        nt = p_t_ns.argmin(1)
-        n_nonzero = xp.count_nonzero(p_t_ns, axis=1)
-        nt[n_nonzero == 0] = max_time_steps
-
-        rt = p_t_ns[xp.arange(batch_size), nt - 1]
-        loss = xp.sum(nt + rt)
-        self._nt = nt
-        return xp.array(loss, dtype=np.float32),
-
-    def backward(self, inputs, gy):
-        p_t_ns = inputs[0]
-        batch_size, max_time_steps = p_t_ns.shape
-        xp = chainer.cuda.get_array_module(p_t_ns)
-        gp_t_ns = xp.zeros_like(p_t_ns)
-        gp_t_ns[xp.arange(batch_size), self._nt - 1] = gy
-        return gp_t_ns,
-
-
-def ponder_loss(p_t_ns):
-    return PonderLoss()(p_t_ns)
+        ponder_cost = F.sum(F.concat(ponder_costs, axis=0))
+        return y, ponder_cost
 
 
 if __name__ == '__main__':
+    use_gpu = False
     max_bit_len = 64
     state_size = 128
     batch_size = 128
@@ -133,20 +112,23 @@ if __name__ == '__main__':
     time_penalty = 0.0001  # hyperparameter "tau"
 
     model = ACTRNN(max_bit_len, state_size)
+    if use_gpu:
+        model.to_gpu()
     optimizer = chainer.optimizers.Adam(learning_rate)
     optimizer.setup(model)
     optimizer.use_cleargrads(True)
 
     loss_log = []
-    for i in range(100000):
+    for i in range(1000000):
         print('{}:'.format(i), end=' ')
-        x, t = generate_parity_data(batch_size=batch_size,
-                                    max_bits=max_bit_len)
-        y, ponder_loss_value = model(x)
-        loss = F.sigmoid_cross_entropy(y, t) + time_penalty * ponder_loss_value
+        x, t = generate_parity_data(
+            batch_size=batch_size, max_bits=max_bit_len, use_gpu=use_gpu)
+
+        y, ponder_cost = model(x)
+        loss = F.sigmoid_cross_entropy(y, t) + time_penalty * ponder_cost
         model.cleargrads()
         loss.backward()
-        loss_log.append(loss.data)
+        loss_log.append(chainer.cuda.to_cpu(loss.data))
         optimizer.update()
 
         accuracy = F.binary_accuracy(y, t)
@@ -154,6 +136,6 @@ if __name__ == '__main__':
         print('acc:', accuracy.data)
 
         if i % 50 == 0:
-            plt.plot(loss_log)
+            plt.plot(loss_log, '.', markersize=1)
             plt.grid()
             plt.show()
