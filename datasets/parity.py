@@ -13,6 +13,7 @@ def generate_parity_data(
         batch_size=128, max_bits=64, min_bits=1, use_gpu=False):
     x = generate_sequences(batch_size, max_bits, min_bits)
     y = 1 - (np.count_nonzero(x, 2).astype(np.int32) % 2)
+    y = np.expand_dims(y, 2)
     if use_gpu:
         x = chainer.cuda.to_gpu(x)
         y = chainer.cuda.to_gpu(y)
