@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import chainer
 import chainer.functions as F
 
-from models.act_rnn import ACTRNN
+from models import ACTNet
 from datasets.logic import LogicDataset
 
 
@@ -29,7 +29,7 @@ if __name__ == '__main__':
     dataset = LogicDataset(batch_size, seq_len, max_ops, min_ops)
     dim_vector = dataset.dim_vector
 
-    model = ACTRNN(dim_vector, state_size, 1)
+    model = ACTNet(dim_vector, state_size, 1)
     if use_gpu:
         model.to_gpu()
     optimizer = chainer.optimizers.Adam(learning_rate)
